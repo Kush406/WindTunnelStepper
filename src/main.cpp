@@ -11,6 +11,9 @@ const int stepsPerRev = 6400; //CHOOSE VALUE Microstepper setting of pulse/rev
 int movementsTraveled = 0; //The number of movements traveled during static motion
 double cyclesTraveled = 0.0; //The number of cycles traveled during cyclic motion (always a multiple of 1 or 0.5)
 bool movingForward = true; //The direction of movement (true = clockwise, false = counterclockwise)
+long lastMoveTime = 0; //Checking the last movement time, important for lingerTime
+bool firstMovement = true; //Checking if it is the first stepper movement
+
 
 //An enum to control the possible states of void loop()
 enum State {
@@ -52,8 +55,8 @@ void acquireData() {
     compIdentifier = "C" + String(cyclesTraveled);
   }
 
-  static int previousMillis = 0;
-  int currentMillis = millis();
+  static long previousMillis = 0;
+  long currentMillis = millis();
 
   //Check if enough time has elapsed since the last iteration
   if (currentMillis - previousMillis >= 1000 / dataRate) {
@@ -85,9 +88,13 @@ bool parseInput(String input) {
     sscanf(dataCollection, "%c%d", &readability, &dataRate);
     //If the mode is static, then special needs to be parsed to obtain movements lingerTime
     if (String(mode) == "STATIC") {
-      int dashInd = String(special).indexOf('-');
-      movements = String(special).substring(0, dashInd).toInt();
-      lingerTime = String(special).substring(dashInd + 1).toInt();
+      if (String(special).indexOf('-') != -1) {
+        movements = String(special).substring(0, String(special).indexOf('-')).toInt();
+        lingerTime = String(special).substring(String(special).indexOf('-') + 1).toInt();
+      } else {
+        Serial.println("Invalid input format for SPECIAL!");
+        return false;
+      }
     } else { //If the mode is CYCLCIC, then special does not need to be parsed and it can be directly converted into a doubel
       cycles = String(special).toDouble();
     }
@@ -115,14 +122,20 @@ bool staticMotion(double startPos, double endPos, int movements) {
   //Invoke the data acquisition method which obtains the stepper's position at a desired rate
   acquireData();
 
-  //If the stepper is not moving and has not completed the number of desired movements
-  if (!stepper->isRunning() && movementsTraveled < movements) {
+  //If the stepper is not moving and has not completed the number of desired movements and either the required lingerTime has passed or it's the first movement
+  if (!stepper->isRunning() && movementsTraveled < movements && (firstMovement || (millis() - lastMoveTime >= lingerTime))) {
 
     //Move to the next position
     stepper->move(round(splitDistance / 360 * stepsPerRev));
 
     //Increase movementsTraveled as we have completed a single partition of the sweep
     movementsTraveled++;
+
+    //Obtain current time to check for lingerTime passing
+    lastMoveTime = millis();
+
+    //No longer in the first movement
+    firstMovement = false;
   }
 
   //Return a boolean on if the stepper is running and if it has completed the desired movements
@@ -266,11 +279,12 @@ void loop() {
         }
 
       } else {
-        //If the static sweep is complete, reset the movementTraveled counter and send the state machine to IDLE
+        //If the static sweep is complete, reset the movementTraveled counter, set firstMovement to true, and send the state machine to IDLE
         acquireData(); //Final data log
         Serial.println("Static sweep complete.");
         movementsTraveled = 0;
         currentState = IDLE;
+        firstMovement = true;
       }
       break;
 
