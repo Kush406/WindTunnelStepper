@@ -20,16 +20,19 @@ enum State {
 };
 State currentState = IDLE; //Initializing the state of motion to IDLE
 
+
 //The variables to be assigned during user input
 char* mode = nullptr; //The mode of motion, assigned during user input
+double startPos, endPos, maxSpeed, acceleration; //The start position, end position, max speed, and acceleration to be assigned during user input
+char* special = nullptr; //Special is the miscellaneous variable which varies based on mode. For static motion it is the number of individual movements. For cyclic motion it is the number of cycles.
+int movements; //The number of desired static movements while in STATIC motion
+double cycles; //The number of cycles to move while in CYCLIC motion
 char* userIdentifier = nullptr; //A user identifier, determined during input to help post-processing
 char* dataCollection = nullptr; //A string representing readability of data and hz. Looks something like H100 or C20. Refer to dataRate and readability for further explanation
-int dataRate; //dataRate is the rate to collect data in Hz.
+int dataRate, lingerTime; //dataRate is the rate to collect data in Hz. lingerTime is the amount to wait between sections of a static sweep, and is only applicable to STATIC mode
 char readability; //Extracted from dataCollection, either H or C where H = human readability, C = computer readability,
-double startPos, endPos, maxSpeed, acceleration; //The start position, end position, max speed, and acceleration to be assigned during user input
-int special; //Special is the miscellaneous variable which varies based on mode. For static motion it is the number of individual movements. For cyclic motion it is the number of cycles.
 bool inputGiven = false; //Determining if input has been given, used to control the flow of input. False upon initialization because no input initially
-//rename to waitForInput??
+
 
 //Initializing the FastAccelStepper engine
 FastAccelStepperEngine engine = FastAccelStepperEngine(); 
@@ -58,7 +61,7 @@ void acquireData() {
     previousMillis = currentMillis;
     //If human readable data is desired, print this specific output
     if (readability == 'H') { 
-      Serial.println("Mode: " + String(mode) + ", Current Position: " + String(stepper->getCurrentPosition() / (double) stepsPerRev * 360) + " degrees");
+      Serial.println("Mode: " + String(mode) + ", Current Position: " + String(stepper->getCurrentPosition() / (double) stepsPerRev * 360) + " degrees.");
 
       //If computer readable data is desired, the print this specific output
     } else if (readability == 'C') {
@@ -75,11 +78,19 @@ void acquireData() {
 
 //A helper method to parse the input and check if its format is acceptable
 bool parseInput(String input) {
-  int result = sscanf(input.c_str(), "%m[^,],%lf,%lf,%lf,%lf,%d,%m[^,],%m[^,]", &mode, &startPos, &endPos, &maxSpeed, &acceleration, &special, &userIdentifier, &dataCollection);
+  int result = sscanf(input.c_str(), "%m[^,],%lf,%lf,%lf,%lf,%m[^,],%m[^,],%m[^,]", &mode, &startPos, &endPos, &maxSpeed, &acceleration, &special, &userIdentifier, &dataCollection);
 
   //Check if sscanf successfully parsed all required values
   if (result == 8) {
     sscanf(dataCollection, "%c%d", &readability, &dataRate);
+    //If the mode is static, then special needs to be parsed to obtain movements lingerTime
+    if (String(mode) == "STATIC") {
+      int dashInd = String(special).indexOf('-');
+      movements = String(special).substring(0, dashInd).toInt();
+      lingerTime = String(special).substring(dashInd + 1).toInt();
+    } else { //If the mode is CYCLCIC, then special does not need to be parsed and it can be directly converted into a doubel
+      cycles = String(special).toDouble();
+    }
     return true;
   } 
   return false;
@@ -240,7 +251,7 @@ void loop() {
     case STATIC_MOTION:
 
       //Run staticMotion and check if it has been completed
-      if (!staticMotion(startPos, endPos, special)) {
+      if (!staticMotion(startPos, endPos, movements)) {
 
         //Serial checker to see if the enter button has been pressed (force stop, return to IDLE state)
         if (Serial.available() > 0 && Serial.peek() == '\n') {
@@ -268,7 +279,7 @@ void loop() {
     case CYCLIC_MOTION:
 
       //Run cyclicMotion and check if it has been completed
-      if (!cyclicMotion(startPos, endPos, special)) {
+      if (!cyclicMotion(startPos, endPos, cycles)) {
 
         //Serial checker to see if the enter button has been pressed (force stop, return to IDLE state)
         if (Serial.available() > 0 && Serial.read() == '\n') {
