@@ -1,11 +1,17 @@
+/*
+PLEASE READ THE DOCUMENTATION HERE BEFORE USAGE:
+https://drive.google.com/file/d/1W-scD9wqPA877qGAAKhdy4K30jgMmn2w/view?usp=sharing
+This document contains information about each segment of input-output communication, with comprehensive examples and explanations.
+*/
 #include <Arduino.h>
 #include <FastAccelStepper.h>
 
 //User-specific setup data
-#define dirPinStepper 12 //Number of DIR+ pin on ESP32
-#define enablePinStepper 13 //Number of ENA+ pin on ESP32
-#define stepPinStepper 14 //Number of PUL+ pin on ESP32
-const int stepsPerRev = 6400; //CHOOSE VALUE Microstepper setting of pulse/rev
+#define dirPinStepper 12 //USER-SPECIFIC VALUE Number of DIR+ pin on microcontroller
+#define enablePinStepper 13 //USER-SPECIFIC VALUE Number of ENA+ pin on microcontroller
+#define stepPinStepper 14 //USER-SPECIFIC VALUE Number of PUL+ pin on microcontroller
+const int stepsPerRev = 6400; //USER-SPECIFIC VALUE Steps/rev, stepper motors have default 200 steps/rev, but can be increase much higher with external microsteppers
+const int baudRate = 115200; //USER-SPECIFIC VALUE Microcontroller baud rate 
 
 //Variables to control static and cyclic motion flow
 int movementsTraveled = 0; //The number of movements traveled during static motion
@@ -95,7 +101,7 @@ bool parseInput(String input) {
         Serial.println("Invalid input format for SPECIAL!");
         return false;
       }
-    } else { //If the mode is CYCLCIC, then special does not need to be parsed and it can be directly converted into a doubel
+    } else { //If the mode is CYCLCIC, then special does not need to be parsed and it can be directly converted into a double
       cycles = String(special).toDouble();
     }
     return true;
@@ -196,7 +202,7 @@ bool cyclicMotion(double startPos, double endPos, int cycles) {
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(baudRate);
 
   //Initialize the FastAccelStepper engine
   engine.init();
